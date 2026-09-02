@@ -17,7 +17,7 @@
     "react-dom": "^18.3.1",
     "leaflet": "^1.9.4",
     "@turf/turf": "^7.1.0",
-    "engine-system-economics": "github:JuyongJuyongJuyong/engine-system-economics#v0.1.0"
+    "engine-system-economics": "github:JuyongJuyongJuyong/engine-system-economics#v0.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
