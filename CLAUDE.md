@@ -12,7 +12,14 @@ Owner: A + B (joint — see repo's CODEOWNERS, both listed).
 ## Scope
 Map interaction (draw/confirm roof polygon on Leaflet, hand the raw `[lat, lng][]` coordinates to `engine-system-economics` — no geodesic math or bin-packing here, that's the engine's job), tap-based question flow, i18n, PDF report generation.
 
-Joint ownership: both work in this repo; to avoid stepping on each other, informally split by feature (e.g. one takes map/polygon-draw + PDF export, the other takes the tap-question-flow + i18n) rather than by strict file ownership — either can review/approve the other's PRs.
+## Role split (rebalanced so both owners work with the math/physics output, not just UI)
+
+Joint ownership: both work in this repo; either can review/approve the other's PRs. Informal split by feature:
+
+- **Owner A** — map/polygon-draw (Leaflet + Turf.js); rendering the radiation/uncertainty numbers `engine-system-economics` returns (the `uncertainty_ci_90` range, per-source breakdown if exposed — this is interpreting and correctly displaying propagated-uncertainty output, not just wiring up a display component); optional NDVI shading cross-check (MODIS via NASA GIBS).
+- **Owner B** — tap-based question flow (power access, self-consumption, shading, roof shape/material); i18n; PDF report generation, which means correctly presenting the ROI amortization / savings / CO2 numbers `engine-system-economics` computes (degradation curve, tariff escalation) rather than just formatting a template.
+
+Neither role is UI-only: A owns correctly surfacing the uncertainty-propagation math in the map/results view, B owns correctly surfacing the economics math in the tap-flow/PDF view.
 
 ## Required UX taps (in priority order — see PROJECT_SUMMARY.md §3 for why)
 1. Power access status: grid-tied / generator-dependent / no power — highest-impact single input, do not skip.
