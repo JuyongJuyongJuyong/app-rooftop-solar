@@ -5,9 +5,14 @@ The Global Rooftop Solar Potential Calculator's front end (3-repo split — see 
 Owner: A + B (joint — see repo's CODEOWNERS, both listed).
 
 ## Non-negotiable constraints (shared across all three repos)
-- Zero-cost stack only: Leaflet.js, Turf.js, SunCalc.js, static hosting. No paid APIs in the default path, no backend server.
+- Zero-cost stack only: Leaflet.js, Turf.js, SunCalc.js, static hosting, GA4 (free tier, client-side script only — doesn't add a backend). No paid APIs in the default path, no backend server.
 - Minimize user input: prefer 1-tap icon choices over typed fields wherever possible.
 - Never claim precision the data doesn't support — every result ships with the uncertainty range and data sources `engine-system-economics` returns, not a single confident number.
+
+## Analytics
+- Google Analytics 4 tracks aggregate traffic only — visitor count, country distribution, session/engagement time. No PII is collected and nothing analytics-related is rendered in the app UI.
+- The `gtag.js` snippet lives directly in `index.html` (Measurement ID `G-7H6N4MLDBF`). The GA4 dashboard is only visible to whoever has access to the Google account that owns the property — it is not exposed anywhere in this repo or the deployed site.
+- If cookie-consent handling (e.g. for EU visitors) is ever added, it belongs in this repo's UX layer, not in either engine repo.
 
 ## Scope
 Map interaction (draw/confirm roof polygon on Leaflet, hand the raw `[lat, lng][]` coordinates to `engine-system-economics` — no geodesic math or bin-packing here, that's the engine's job), tap-based question flow, i18n, PDF report generation.
