@@ -39,11 +39,19 @@ export default function App() {
 
   return (
     <div className="app">
-      <h1>Global Rooftop Solar Potential Calculator</h1>
+      <h1 className="app__title">Global Rooftop Solar Potential Calculator</h1>
+      {/* Each stage in its own .section card so the page reads as clear
+          steps (map -> questions -> result) rather than one long
+          unstructured column — see the 2026-09-07 UX pass note in
+          RoofMap.tsx for why this repo needed a visible-structure pass. */}
       {/* Owner A: map/polygon-draw + radiation-uncertainty rendering */}
-      <RoofMap onPolygonChange={setRoofPolygon} />
+      <div className="section">
+        <RoofMap onPolygonChange={setRoofPolygon} />
+      </div>
       {/* Owner B: tap-question flow + i18n + PDF export trigger */}
-      <QuestionFlow roofPolygon={roofPolygon} onSubmit={handleSubmit} />
+      <div className="section">
+        <QuestionFlow roofPolygon={roofPolygon} onSubmit={handleSubmit} />
+      </div>
       {error && <p role="alert">{error}</p>}
       {result && <ResultsPanel result={result} />}
     </div>

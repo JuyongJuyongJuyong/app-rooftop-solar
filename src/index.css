@@ -1,14 +1,184 @@
+/**
+ * Base design tokens + shared component styles.
+ *
+ * Target users per CLAUDE.md: limited literacy, low-end phones, developing
+ * regions. That drives every choice here: large touch targets (min 44px,
+ * the iOS/Android accessibility floor — small buttons are the single
+ * biggest reason a low-end-phone user mis-taps), icon-first controls with
+ * short labels rather than sentences, high-contrast colors that still hold
+ * up on a washed-out budget-phone screen in daylight, and no reliance on
+ * hover states (irrelevant on touch, but also don't gate any functionality
+ * behind hover-only affordances).
+ *
+ * Deliberately plain CSS custom properties + classes, no CSS framework —
+ * this repo has no styling library dependency yet and adding one isn't a
+ * single component's call to make. If a design system is adopted later,
+ * these tokens are the values to port over.
+ */
+
 :root {
   color-scheme: light dark;
+
+  --color-primary: #2563eb;
+  --color-primary-active: #1d4ed8;
+  --color-success: #16a34a;
+  --color-danger: #dc2626;
+  --color-text: #1f2937;
+  --color-text-muted: #6b7280;
+  --color-border: #e5e7eb;
+  --color-surface: #ffffff;
+  --color-surface-alt: #f9fafb;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+
+  --radius: 10px;
+  --touch-target: 44px; /* minimum tappable size — do not shrink below this */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-text: #f3f4f6;
+    --color-text-muted: #9ca3af;
+    --color-border: #374151;
+    --color-surface: #1f2937;
+    --color-surface-alt: #111827;
+  }
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  font-family: system-ui, sans-serif;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--color-text);
+  background: var(--color-surface-alt);
+  /* Slightly larger base size than the browser default — readability on a
+     small, low-DPI screen matters more here than fitting more on screen. */
+  font-size: 17px;
+  line-height: 1.5;
 }
 
 .app {
   max-width: 720px;
   margin: 0 auto;
-  padding: 1rem;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.app__title {
+  font-size: 1.375rem;
+  margin: 0;
+}
+
+/* Section = one step of the flow (map, questions, results). Card-style
+   framing gives the page visible structure instead of everything running
+   together as one long unstyled column. */
+.section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+}
+
+/* Buttons: icon + short label, generous touch target, visible pressed
+   state (no hover-only feedback — this is a touch-first app). */
+button {
+  min-height: var(--touch-target);
+  min-width: var(--touch-target);
+  padding: var(--space-2) var(--space-4);
+  font-size: 1rem;
+  font-weight: 600;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+button:active:not(:disabled) {
+  background: var(--color-surface-alt);
+  transform: scale(0.98);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.button--primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
+
+button.button--primary:active:not(:disabled) {
+  background: var(--color-primary-active);
+}
+
+[role='alert'] {
+  background: #fef2f2;
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  font-size: 0.9rem;
+}
+
+/* --- RoofMap --- */
+
+.roof-map__map {
+  height: min(60vh, 420px); /* generous on mobile, capped on desktop */
+  width: 100%;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.roof-map__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.roof-map__status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.roof-map__status--ready {
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+/* --- ResultsPanel --- */
+
+.results-panel {
+  border-color: var(--color-primary);
+}
+
+.results-panel__primary {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.results-panel__ci {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  margin: var(--space-1) 0 var(--space-4);
 }

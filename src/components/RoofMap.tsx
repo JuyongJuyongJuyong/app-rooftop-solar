@@ -30,6 +30,18 @@ import L from 'leaflet';
  *
  * TODO(Owner A): optional NDVI shading cross-check via MODIS (NASA GIBS) —
  * not required for the accuracy target, not implemented here.
+ *
+ * UX pass (2026-09-07): CLAUDE.md's target users are "limited literacy,
+ * low-end phones, developing regions" with a "minimize typing, maximize
+ * taps" / icon-first principle. The first version of this component was a
+ * plain-text, English-only, browser-default-button UI that didn't meet
+ * that bar. This version: icon+short-label buttons at a >=44px touch
+ * target, the first vertex visually distinguished (readers can see where
+ * the outline will close instead of being told in a sentence), and an
+ * icon-led status line instead of a full sentence. Still NOT i18n-wrapped
+ * — CLAUDE.md assigns "wrap all user-facing strings" to Owner B's
+ * QuestionFlow work; the short strings added here should get the same
+ * treatment whenever that i18n setup lands, not be special-cased.
  */
 
 const DEFAULT_CENTER: [number, number] = [37.5665, 126.978]; // Seoul — used only if geolocation is denied/unavailable
@@ -108,8 +120,15 @@ export function RoofMap({ onPolygonChange }: RoofMapProps) {
     vertexMarkersRef.current = [];
 
     if (points.length > 0) {
-      vertexMarkersRef.current = points.map((p) =>
-        L.circleMarker(p, { radius: 5, color: '#2563eb', fillColor: '#2563eb', fillOpacity: 1 }).addTo(map),
+      vertexMarkersRef.current = points.map((p, i) =>
+        // First vertex marked distinctly (larger, filled solid) so the
+        // user can see where the outline will close back to, rather than
+        // being told in a sentence — closing an outline by "tapping back
+        // on the first point" is a much more common map-drawing pattern
+        // than reading instructions for it.
+        i === 0
+          ? L.circleMarker(p, { radius: 8, color: '#16a34a', fillColor: '#16a34a', fillOpacity: 1, weight: 3 }).addTo(map)
+          : L.circleMarker(p, { radius: 5, color: '#2563eb', fillColor: '#2563eb', fillOpacity: 1 }).addTo(map),
       );
     }
     if (points.length >= 3) {
@@ -136,29 +155,38 @@ export function RoofMap({ onPolygonChange }: RoofMapProps) {
     setPoints([]);
   }
 
+  const ready = points.length >= 3;
+
   return (
     <div className="roof-map">
-      <div
-        ref={containerRef}
-        style={{ height: '360px', width: '100%', borderRadius: '8px', overflow: 'hidden' }}
-      />
-      <div className="roof-map__controls" style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-        <button type="button" onClick={handleUndo} disabled={points.length === 0}>
-          Undo last point
+      <div ref={containerRef} className="roof-map__map" />
+      <div className="roof-map__controls">
+        <button type="button" onClick={handleUndo} disabled={points.length === 0} aria-label="Undo last point">
+          <span aria-hidden="true">↩️</span> Undo
         </button>
-        <button type="button" onClick={handleReset} disabled={points.length === 0}>
-          Reset
+        <button type="button" onClick={handleReset} disabled={points.length === 0} aria-label="Reset outline">
+          <span aria-hidden="true">🗑️</span> Reset
         </button>
-        <span style={{ alignSelf: 'center', fontSize: '0.875rem', color: '#666' }}>
-          {locating
-            ? 'Locating…'
-            : points.length === 0
-              ? 'Tap the map to start outlining your roof.'
-              : points.length < 3
-                ? `${points.length} point(s) — need at least 3 to form a roof outline.`
-                : `${points.length} point(s) — outline ready.`}
-        </span>
       </div>
+      <p className={`roof-map__status ${ready ? 'roof-map__status--ready' : ''}`}>
+        {locating ? (
+          <>
+            <span aria-hidden="true">📍</span> Locating…
+          </>
+        ) : ready ? (
+          <>
+            <span aria-hidden="true">✅</span> Outline ready ({points.length} points)
+          </>
+        ) : points.length === 0 ? (
+          <>
+            <span aria-hidden="true">👆</span> Tap your roof's corners on the map
+          </>
+        ) : (
+          <>
+            <span aria-hidden="true">👆</span> {points.length} of 3+ points — keep tapping
+          </>
+        )}
+      </p>
     </div>
   );
 }
