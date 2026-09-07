@@ -19,6 +19,10 @@ import { ResultsPanel } from './components/ResultsPanel';
 export default function App() {
   const [result, setResult] = useState<SystemEconomicsOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Lifted here (rather than left local to RoofMap) because QuestionFlow
+  // needs it too, to assemble SystemEconomicsInput.roofPolygon — see
+  // RoofMap's onPolygonChange doc comment for what shape this is.
+  const [roofPolygon, setRoofPolygon] = useState<[number, number][]>([]);
 
   function handleSubmit(input: SystemEconomicsInput) {
     try {
@@ -37,9 +41,9 @@ export default function App() {
     <div className="app">
       <h1>Global Rooftop Solar Potential Calculator</h1>
       {/* Owner A: map/polygon-draw + radiation-uncertainty rendering */}
-      <RoofMap />
+      <RoofMap onPolygonChange={setRoofPolygon} />
       {/* Owner B: tap-question flow + i18n + PDF export trigger */}
-      <QuestionFlow onSubmit={handleSubmit} />
+      <QuestionFlow roofPolygon={roofPolygon} onSubmit={handleSubmit} />
       {error && <p role="alert">{error}</p>}
       {result && <ResultsPanel result={result} />}
     </div>
