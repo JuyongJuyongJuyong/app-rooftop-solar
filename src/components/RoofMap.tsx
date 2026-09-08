@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
+import { getRoofMapStatus } from './roofMapStatus';
 
 /**
  * Owner A — map/polygon-draw (Leaflet + Turf.js).
@@ -42,6 +43,34 @@ import L from 'leaflet';
  * — CLAUDE.md assigns "wrap all user-facing strings" to Owner B's
  * QuestionFlow work; the short strings added here should get the same
  * treatment whenever that i18n setup lands, not be special-cased.
+ *
+ * UX pass 2 (2026-09-08): two gaps left from the first pass.
+ *  1. The module doc above says "draw/confirm a roof polygon", but there
+ *     was no actual confirm step — the outline just silently became
+ *     "ready" at 3+ points while still accepting unlimited more taps, with
+ *     no way to tell the user "you're done, this is locked in". Added an
+ *     explicit confirm/edit toggle: tapping "Confirm outline" locks the
+ *     map (no more points accepted) and swaps the controls to
+ *     "Edit outline" / "Start over"; tapping "Edit" reopens it.
+ *     onPolygonChange's existing contract (fires live, on every points
+ *     change) is unchanged by this — it's purely an added UI/lock state,
+ *     not a new prop or a gate on the callback, so nothing downstream
+ *     needs to change to pick it up.
+ *  2. Geolocation denial/timeout silently fell back to the Seoul default
+ *     center with zero explanation — a user not in Seoul would just see an
+ *     unrelated city with no idea why. Now surfaced as a status line.
+ *  Also disabled Leaflet's built-in doubleClickZoom: two roof corners
+ *  tapped in quick succession near the same spot risked being read as a
+ *  double-click (zooming the map) instead of two separate vertices — this
+ *  is a click-to-add-points screen, not a click-to-zoom one, so that
+ *  built-in behavior fights the one thing this screen is for.
+ *
+ * getRoofMapStatus (in ./roofMapStatus, kept pure/no Leaflet/DOM and in its
+ * own module so eslint's react-refresh rule doesn't complain about a
+ * component file exporting a non-component) is what this component's core
+ * state logic reduces to for display purposes — see RoofMap.test.ts for its
+ * unit coverage, which doesn't need to mount a live Leaflet map in jsdom
+ * (heavy and flaky) to exercise.
  */
 
 const DEFAULT_CENTER: [number, number] = [37.5665, 126.978]; // Seoul — used only if geolocation is denied/unavailable
@@ -64,9 +93,14 @@ export function RoofMap({ onPolygonChange }: RoofMapProps) {
   const mapRef = useRef<L.Map | null>(null);
   const polygonLayerRef = useRef<L.Polygon | null>(null);
   const vertexMarkersRef = useRef<L.CircleMarker[]>([]);
+  // The map's click handler is registered once, in the mount effect, so it
+  // closes over this ref (not the `confirmed` state) to see later updates.
+  const confirmedRef = useRef(false);
 
   const [points, setPoints] = useState<[number, number][]>([]);
   const [locating, setLocating] = useState(true);
+  const [locationDenied, setLocationDenied] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
 
   // Initialize the map once. Center on the user's current position when
   // available (falls back to DEFAULT_CENTER on denial/timeout/unsupported
@@ -74,7 +108,11 @@ export function RoofMap({ onPolygonChange }: RoofMapProps) {
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    const map = L.map(containerRef.current).setView(DEFAULT_CENTER, 16);
+    const map = L.map(containerRef.current, {
+      // A quick double-tap on two nearby roof corners should place two
+      // points, not zoom the map — see "UX pass 2" doc note above.
+      doubleClickZoom: false,
+    }).setView(DEFAULT_CENTER, 16);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors',
       maxZoom: 20,
@@ -82,6 +120,7 @@ export function RoofMap({ onPolygonChange }: RoofMapProps) {
     mapRef.current = map;
 
     map.on('click', (e: L.LeafletMouseEvent) => {
+      if (confirmedRef.current) return; // locked — see handleConfirm/handleEdit
       const next: [number, number] = [e.latlng.lat, e.latlng.lng];
       setPoints((prev) => [...prev, next]);
     });
@@ -93,11 +132,15 @@ export function RoofMap({ onPolygonChange }: RoofMapProps) {
           map.setView(center, DEFAULT_ZOOM);
           setLocating(false);
         },
-        () => setLocating(false), // denied / unavailable — keep DEFAULT_CENTER
+        () => {
+          setLocating(false);
+          setLocationDenied(true); // denied / unavailable — keep DEFAULT_CENTER, but say so
+        },
         { timeout: 8000 },
       );
     } else {
       setLocating(false);
+      setLocationDenied(true);
     }
 
     return () => {
@@ -153,40 +196,89 @@ export function RoofMap({ onPolygonChange }: RoofMapProps) {
 
   function handleReset() {
     setPoints([]);
+    confirmedRef.current = false;
+    setConfirmed(false);
+  }
+
+  function handleConfirm() {
+    confirmedRef.current = true;
+    setConfirmed(true);
+  }
+
+  function handleEdit() {
+    confirmedRef.current = false;
+    setConfirmed(false);
   }
 
   const ready = points.length >= 3;
+  const status = getRoofMapStatus(points.length, locating, confirmed);
 
   return (
     <div className="roof-map">
       <div ref={containerRef} className="roof-map__map" />
       <div className="roof-map__controls">
-        <button type="button" onClick={handleUndo} disabled={points.length === 0} aria-label="Undo last point">
-          <span aria-hidden="true">↩️</span> Undo
-        </button>
-        <button type="button" onClick={handleReset} disabled={points.length === 0} aria-label="Reset outline">
-          <span aria-hidden="true">🗑️</span> Reset
-        </button>
+        {confirmed ? (
+          <>
+            <button type="button" onClick={handleEdit} aria-label="Edit outline">
+              <span aria-hidden="true">✏️</span> Edit
+            </button>
+            <button type="button" onClick={handleReset} aria-label="Start over">
+              <span aria-hidden="true">🗑️</span> Start over
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" onClick={handleUndo} disabled={points.length === 0} aria-label="Undo last point">
+              <span aria-hidden="true">↩️</span> Undo
+            </button>
+            <button type="button" onClick={handleReset} disabled={points.length === 0} aria-label="Reset outline">
+              <span aria-hidden="true">🗑️</span> Reset
+            </button>
+            <button
+              type="button"
+              className="button--primary"
+              onClick={handleConfirm}
+              disabled={!ready}
+              aria-label="Confirm outline"
+            >
+              <span aria-hidden="true">✅</span> Confirm outline
+            </button>
+          </>
+        )}
       </div>
-      <p className={`roof-map__status ${ready ? 'roof-map__status--ready' : ''}`}>
-        {locating ? (
+      <p className={`roof-map__status ${status === 'confirmed' ? 'roof-map__status--ready' : ''}`}>
+        {status === 'locating' && (
           <>
             <span aria-hidden="true">📍</span> Locating…
           </>
-        ) : ready ? (
+        )}
+        {status === 'confirmed' && (
           <>
-            <span aria-hidden="true">✅</span> Outline ready ({points.length} points)
+            <span aria-hidden="true">🔒</span> Outline confirmed ({points.length} points)
           </>
-        ) : points.length === 0 ? (
+        )}
+        {status === 'ready' && (
+          <>
+            <span aria-hidden="true">✅</span> Outline ready ({points.length} points) — tap Confirm when done
+          </>
+        )}
+        {status === 'empty' && (
           <>
             <span aria-hidden="true">👆</span> Tap your roof's corners on the map
           </>
-        ) : (
+        )}
+        {status === 'in-progress' && (
           <>
             <span aria-hidden="true">👆</span> {points.length} of 3+ points — keep tapping
           </>
         )}
       </p>
+      {locationDenied && status !== 'confirmed' && (
+        <p className="roof-map__status">
+          <span aria-hidden="true">ℹ️</span> Couldn't get your location, so the map starts centered on a default spot
+          — pan/zoom to find your roof.
+        </p>
+      )}
     </div>
   );
 }
