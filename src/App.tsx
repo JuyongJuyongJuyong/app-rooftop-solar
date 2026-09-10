@@ -9,12 +9,13 @@
  * dependency, in-process call, no network) -> result rendered back here.
  * See ARCHITECTURE.md's "Important: these are packages, not services".
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { getSystemEconomics } from 'engine-system-economics';
 import type { SystemEconomicsInput, SystemEconomicsOutput } from 'engine-system-economics';
 import { RoofMap } from './components/RoofMap';
 import { QuestionFlow } from './components/QuestionFlow';
 import { ResultsPanel } from './components/ResultsPanel';
+import { deriveRoofLocation } from './roofLocation';
 
 export default function App() {
   const [result, setResult] = useState<SystemEconomicsOutput | null>(null);
@@ -23,6 +24,13 @@ export default function App() {
   // needs it too, to assemble SystemEconomicsInput.roofPolygon — see
   // RoofMap's onPolygonChange doc comment for what shape this is.
   const [roofPolygon, setRoofPolygon] = useState<[number, number][]>([]);
+  // SystemEconomicsInput.location — an explicit field per ARCHITECTURE.md
+  // ("SystemEconomicsInput fields relevant to the Radiation call"), derived
+  // here (not inside engine-system-economics) specifically so the two stay
+  // independent: economics validates `location` against `roofPolygon`
+  // rather than trusting a single source of truth for both. See
+  // roofLocation.ts for why center-of-mass, not mean-of-vertices.
+  const location = useMemo(() => deriveRoofLocation(roofPolygon), [roofPolygon]);
 
   function handleSubmit(input: SystemEconomicsInput) {
     try {
@@ -50,7 +58,7 @@ export default function App() {
       </div>
       {/* Owner B: tap-question flow + i18n + PDF export trigger */}
       <div className="section">
-        <QuestionFlow roofPolygon={roofPolygon} onSubmit={handleSubmit} />
+        <QuestionFlow roofPolygon={roofPolygon} location={location} onSubmit={handleSubmit} />
       </div>
       {error && <p role="alert">{error}</p>}
       {result && <ResultsPanel result={result} />}
