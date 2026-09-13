@@ -32,9 +32,16 @@ export default function App() {
   // roofLocation.ts for why center-of-mass, not mean-of-vertices.
   const location = useMemo(() => deriveRoofLocation(roofPolygon), [roofPolygon]);
 
-  function handleSubmit(input: SystemEconomicsInput) {
+  // async: engine-system-economics's getSystemEconomics() is async as of
+  // the pre-integration build (it awaits Radiation and, when a panel layout
+  // is supplied, an elevation lookup) -- see ARCHITECTURE.md. onSubmit's
+  // declared `=> void` type still accepts this (TS's void-return callback
+  // rule), and try/catch here still catches a synchronous throw too, so
+  // this is safe against both the current v0.1.1 stub and the real engine.
+  async function handleSubmit(input: SystemEconomicsInput) {
     try {
-      setResult(getSystemEconomics(input));
+      const output = await getSystemEconomics(input);
+      setResult(output);
       setError(null);
     } catch (err) {
       // Expected for now: engine-system-economics and
