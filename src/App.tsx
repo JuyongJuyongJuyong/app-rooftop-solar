@@ -9,20 +9,39 @@
  * dependency, in-process call, no network) -> result rendered back here.
  * See ARCHITECTURE.md's "Important: these are packages, not services".
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { getSystemEconomics } from 'engine-system-economics';
 import type { SystemEconomicsInput, SystemEconomicsOutput } from 'engine-system-economics';
 import { RoofMap } from './components/RoofMap';
 import { QuestionFlow } from './components/QuestionFlow';
 import { ResultsPanel } from './components/ResultsPanel';
+import { deriveRoofLocation } from './roofLocation';
 
 export default function App() {
   const [result, setResult] = useState<SystemEconomicsOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Lifted here (rather than left local to RoofMap) because QuestionFlow
+  // needs it too, to assemble SystemEconomicsInput.roofPolygon — see
+  // RoofMap's onPolygonChange doc comment for what shape this is.
+  const [roofPolygon, setRoofPolygon] = useState<[number, number][]>([]);
+  // SystemEconomicsInput.location — an explicit field per ARCHITECTURE.md
+  // ("SystemEconomicsInput fields relevant to the Radiation call"), derived
+  // here (not inside engine-system-economics) specifically so the two stay
+  // independent: economics validates `location` against `roofPolygon`
+  // rather than trusting a single source of truth for both. See
+  // roofLocation.ts for why center-of-mass, not mean-of-vertices.
+  const location = useMemo(() => deriveRoofLocation(roofPolygon), [roofPolygon]);
 
-  function handleSubmit(input: SystemEconomicsInput) {
+  // async: engine-system-economics's getSystemEconomics() is async as of
+  // the pre-integration build (it awaits Radiation and, when a panel layout
+  // is supplied, an elevation lookup) -- see ARCHITECTURE.md. onSubmit's
+  // declared `=> void` type still accepts this (TS's void-return callback
+  // rule), and try/catch here still catches a synchronous throw too, so
+  // this is safe against both the current v0.1.1 stub and the real engine.
+  async function handleSubmit(input: SystemEconomicsInput) {
     try {
-      setResult(getSystemEconomics(input));
+      const output = await getSystemEconomics(input);
+      setResult(output);
       setError(null);
     } catch (err) {
       // Expected for now: engine-system-economics and
@@ -35,11 +54,19 @@ export default function App() {
 
   return (
     <div className="app">
-      <h1>Global Rooftop Solar Potential Calculator</h1>
+      <h1 className="app__title">Global Rooftop Solar Potential Calculator</h1>
+      {/* Each stage in its own .section card so the page reads as clear
+          steps (map -> questions -> result) rather than one long
+          unstructured column — see the 2026-09-07 UX pass note in
+          RoofMap.tsx for why this repo needed a visible-structure pass. */}
       {/* Owner A: map/polygon-draw + radiation-uncertainty rendering */}
-      <RoofMap />
+      <div className="section">
+        <RoofMap onPolygonChange={setRoofPolygon} />
+      </div>
       {/* Owner B: tap-question flow + i18n + PDF export trigger */}
-      <QuestionFlow onSubmit={handleSubmit} />
+      <div className="section">
+        <QuestionFlow roofPolygon={roofPolygon} location={location} onSubmit={handleSubmit} />
+      </div>
       {error && <p role="alert">{error}</p>}
       {result && <ResultsPanel result={result} />}
     </div>
