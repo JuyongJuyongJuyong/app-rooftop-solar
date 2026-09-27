@@ -30,8 +30,15 @@ Neither role is UI-only: A owns correctly surfacing the uncertainty-propagation 
 1. Power access status: grid-tied / generator-dependent / no power — highest-impact single input, do not skip.
 2. Self-consumption bucket: mostly-out / mixed / mostly-home (skip if net-metered).
 3. Shading level (icon), optionally cross-checked against NDVI — Sentinel-2 (10m) isn't free/anonymous-access feasible, so use free MODIS-based NDVI (NASA GIBS, 250–500m) if this cross-check ships, or drop it — it's a nice-to-have, not required for the accuracy target.
-4. Roof shape (flat/gable/unknown) — splits azimuth 50/50 for gable roofs (computed by `engine-system-economics`, not here).
-5. Roof material — feasibility gate (e.g. thatch → "get a local structural check" message, not a number).
+4. Roof shape (flat/gable/unknown) — descriptive only in v1; never fabricate roof planes or split azimuth.
+5. Roof material — descriptive/warning-only in Milestone 1, not a structural-safety determination.
+
+## Milestone 1
+English-only electrical-generation flow; self-consumption and financial questions
+are deferred. See MILESTONE1.md for approved tier/panel/clearance assumptions.
+No sourced economics/emissions inputs are supplied, so financial/emissions outputs
+remain null. Render provisional scenarios, never call them 90% confidence ranges.
+Explicit location is derived with point-on-feature; roof confirmation gates submission.
 
 ## Interface
 - **Sends to `engine-system-economics`**: roof polygon (`[lat, lng][]`), roof metadata (shape, material, shading tap), power-access/self-consumption taps, location.

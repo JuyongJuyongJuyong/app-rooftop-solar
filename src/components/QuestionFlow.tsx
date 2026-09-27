@@ -1,44 +1,46 @@
+import { useState } from 'react';
 import type { SystemEconomicsInput } from 'engine-system-economics';
+import { buildMilestoneInput } from '../milestone1';
 
-/**
- * Owner B — tap-based question flow + i18n.
- *
- * TODO(Owner B) per CLAUDE.md, in priority order:
- *  1. Power access: grid-tied / generator-dependent / no-power (required).
- *  2. Self-consumption: mostly-out / mixed / mostly-home (skip if net-metered).
- *  3. Shading level (icon tap, optional NDVI cross-check from RoofMap).
- *  4. Roof shape: flat / gable / unknown.
- *  5. Roof material (feasibility gate, e.g. thatch -> structural-check message).
- * Assemble a SystemEconomicsInput (roofPolygon comes from RoofMap, passed
- * in via the roofPolygon prop below — wired up in App.tsx) and call
- * onSubmit. i18n: wrap all user-facing strings, don't hardcode English.
- *
- * `roofPolygon` prop: live-updates as the user draws on RoofMap (may be
- * empty or have < 3 points mid-draw — gate whatever "submit" control this
- * component ends up with on roofPolygon.length >= 3 rather than assuming
- * it's always a valid ring by the time onSubmit fires).
- *
- * `location` prop (added 2026-09-10, per ARCHITECTURE.md's "App -> Economics
- * -> Radiation" decision): `SystemEconomicsInput.location` per that same
- * doc's "SystemEconomicsInput fields relevant to the Radiation call" — an
- * explicit field, not something engine-system-economics should derive from
- * roofPolygon itself. Derived here in app-rooftop-solar (App.tsx, via
- * roofLocation.ts's deriveRoofLocation — Turf center-of-mass, not a plain
- * vertex-average) precisely so the two stay independent: pass both straight
- * through into SystemEconomicsInput and let engine-system-economics
- * validate `location` against `roofPolygon` rather than trusting one
- * silently-derived value for both. Same live-update / "may be null before
- * roofPolygon has 3 points" caveat as roofPolygon above — null exactly
- * when roofPolygon.length < 3.
- */
-export function QuestionFlow({
-  roofPolygon: _roofPolygon,
-  location: _location,
-  onSubmit: _onSubmit,
-}: {
-  roofPolygon: [number, number][];
-  location: { lat: number; lng: number } | null;
+export function QuestionFlow({ roofPolygon, location, confirmed, pending, onChange, onSubmit }: {
+  roofPolygon: SystemEconomicsInput['roofPolygon'];
+  location: SystemEconomicsInput['location'] | null;
+  confirmed: boolean;
+  pending: boolean;
+  onChange: () => void;
   onSubmit: (input: SystemEconomicsInput) => void;
 }) {
-  return <div className="question-flow">TODO(Owner B): tap-based question flow</div>;
+  const [powerAccess, setPowerAccess] = useState<SystemEconomicsInput['powerAccess'] | null>(null);
+  const [shape, setShape] = useState<SystemEconomicsInput['roofMetadata']['shape'] | null>(null);
+  const [material, setMaterial] = useState<string | null>(null);
+  const [shadingTap, setShadingTap] = useState<number | null>(null);
+  const ready = confirmed && roofPolygon.length >= 3 && location !== null;
+  const answered = powerAccess !== null && shape !== null && material !== null && shadingTap !== null;
+  return <form className="question-flow" onSubmit={event => {
+    event.preventDefault();
+    if (!ready || pending || !location || powerAccess === null || shape === null || material === null || shadingTap === null) return;
+    onSubmit(buildMilestoneInput(roofPolygon, location, { powerAccess, roofMetadata: { shape, material, shadingTap } }));
+  }}>
+    <h2>Tell us about this roof</h2>
+    <fieldset><legend>Power access</legend>
+      {([['grid-tied', 'Grid-tied'], ['generator-dependent', 'Generator-dependent'], ['no-power', 'No power']] as const).map(([value, label]) =>
+        <label key={value}><input required type="radio" name="power" value={value} checked={powerAccess === value} onChange={() => { onChange(); setPowerAccess(value); }} />{label}</label>)}
+    </fieldset>
+    <fieldset><legend>Roof shape (descriptive only)</legend>
+      {(['flat', 'gable', 'unknown'] as const).map(value => <label key={value}><input required type="radio" name="shape" value={value} checked={shape === value} onChange={() => { onChange(); setShape(value); }} />{value}</label>)}
+    </fieldset>
+    <fieldset><legend>Roof material (not a structural assessment)</legend>
+      {['metal', 'tile', 'concrete', 'asphalt', 'thatch', 'other', 'unknown'].map(value => <label key={value}><input required type="radio" name="material" value={value} checked={material === value} onChange={() => { onChange(); setMaterial(value); }} />{value}</label>)}
+    </fieldset>
+    <fieldset aria-describedby="shading-note"><legend>Observed shading</legend>
+      {/* Ordinal metadata only: 0 little/none, 1 some, 2 much, 3 unknown.
+          NOT loss percentages; never sets physical.shadingFactor. */}
+      {['Little or none', 'Some', 'Much', 'Unknown'].map((label, value) => <label key={value}><input required type="radio" name="shading" value={value} checked={shadingTap === value} onChange={() => { onChange(); setShadingTap(value); }} />{label}</label>)}
+    </fieldset>
+    <p id="shading-note">Shading is recorded only; this estimate does not quantify its effect on generation.</p>
+    {!ready && <p>Draw and confirm a roof with a valid representative location before calculating.</p>}
+    {!answered && <p>Choose an answer in each group. “Unknown” is an explicit answer where offered.</p>}
+    <button type="submit" disabled={!ready || !answered || pending}>Calculate annual electricity</button>
+    {pending && <p role="status">Calculating annual electricity…</p>}
+  </form>;
 }

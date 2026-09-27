@@ -38,13 +38,10 @@ export function ResultsPanel({ result }: { result: SystemEconomicsOutput }) {
     <div className="section results-panel">
       {hasElectricalEstimate ? (
         <>
-          {/* Visual hierarchy only -- same values, same precision as
-              result.kWh / the physical scenario envelope, nothing
-              recomputed or rounded away. See this file's module doc
-              comment for why that distinction matters here specifically. */}
+          {/* Whole-unit display rounding only; do not relabel scenario bounds as a CI. */}
           <p className="results-panel__primary">{result.kWh!.toFixed(0)} kWh/yr</p>
           <p className="results-panel__ci">
-            90% scenario range: {result.physical!.uncertainty.energyScenarioEnvelopeKwh[0].toFixed(0)}
+            Provisional scenario range: {result.physical!.uncertainty.energyScenarioEnvelopeKwh[0].toFixed(0)}
             {'-'}
             {result.physical!.uncertainty.energyScenarioEnvelopeKwh[1].toFixed(0)} kWh/yr
           </p>
@@ -53,7 +50,7 @@ export function ResultsPanel({ result }: { result: SystemEconomicsOutput }) {
         <>
           <p className="results-panel__primary">Add a panel layout for an electrical output estimate</p>
           <p className="results-panel__ci">
-            Annual irradiation (not yet electrical output): {irradiationLow.toFixed(0)}
+            Provisional annual irradiation scenario (not yet electrical output): {irradiationLow.toFixed(0)}
             {'-'}
             {irradiationHigh.toFixed(0)} kWh/m2/yr
           </p>
@@ -61,6 +58,12 @@ export function ResultsPanel({ result }: { result: SystemEconomicsOutput }) {
       )}
       <p>Savings: {formatMetric(result.savings, 'Savings unavailable: supply tariff and compensated fraction (or net metering).')}</p>
       <p>CO2 offset: {formatMetric(result.co2, 'CO2 offset unavailable: supply an emissions factor.')}</p>
+      <p>ROI: unavailable in Milestone 1. Payback: unavailable in Milestone 1.</p>
+      <p>Provisional estimates, not calibrated 90% confidence intervals.</p>
+      <details><summary>Engine assumptions and sources</summary>
+        <ul>{result.assumptions.map(a => <li key={a.id}>{a.description} — {a.source}</li>)}</ul>
+        <ul>{result.provenance.map((p, i) => <li key={`${p.id}-${i}`}>{p.description}</li>)}</ul>
+      </details>
       {result.warnings.length > 0 && (
         <ul className="results-panel__warnings">
           {result.warnings.map((w, i) => <li key={`${w.code}-${i}`}>{w.message}</li>)}

@@ -20,14 +20,9 @@ import { getRoofMapStatus } from './roofMapStatus';
  * the onPolygonChange contract this component exposes doesn't need to
  * change either way.
  *
- * Known open question (see project coordination thread, 2026-09-07):
- * engine-system-economics' current SystemEconomicsInput has no `location`
- * (lat/lng) field, even though it needs one to call
- * getRadiationEstimate({lat, lng, tier, ...}) internally. Until that's
- * resolved, this component only hands up the raw polygon — a caller that
- * needs a single representative point can derive one (e.g. polygon
- * centroid via Turf.js) from what onPolygonChange already provides, so no
- * separate "location" output was invented here ahead of that decision.
+ * App derives the explicit Economics location using point-on-feature.
+ * Confirmation is reported separately through onConfirmedChange; geometry
+ * stays live through onPolygonChange. Neither callback fabricates roof planes.
  *
  * TODO(Owner A): optional NDVI shading cross-check via MODIS (NASA GIBS) —
  * not required for the accuracy target, not implemented here.
@@ -53,9 +48,9 @@ import { getRoofMapStatus } from './roofMapStatus';
  *     map (no more points accepted) and swaps the controls to
  *     "Edit outline" / "Start over"; tapping "Edit" reopens it.
  *     onPolygonChange's existing contract (fires live, on every points
- *     change) is unchanged by this — it's purely an added UI/lock state,
- *     not a new prop or a gate on the callback, so nothing downstream
- *     needs to change to pick it up.
+ *     change) remains unchanged. Milestone 1 also exposes confirmation
+ *     through onConfirmedChange so App can gate calculation readiness;
+ *     editing or resetting the outline invalidates that readiness.
  *  2. Geolocation denial/timeout silently fell back to the Seoul default
  *     center with zero explanation — a user not in Seoul would just see an
  *     unrelated city with no idea why. Now surfaced as a status line.
@@ -86,9 +81,11 @@ export interface RoofMapProps {
    * until there are >= 3 points.
    */
   onPolygonChange?: (polygon: [number, number][]) => void;
+  /** Reports initial state and confirm/edit/reset transitions to the parent. */
+  onConfirmedChange?: (confirmed: boolean) => void;
 }
 
-export function RoofMap({ onPolygonChange }: RoofMapProps) {
+export function RoofMap({ onPolygonChange, onConfirmedChange }: RoofMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const polygonLayerRef = useRef<L.Polygon | null>(null);
@@ -101,6 +98,8 @@ export function RoofMap({ onPolygonChange }: RoofMapProps) {
   const [locating, setLocating] = useState(true);
   const [locationDenied, setLocationDenied] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+
+  useEffect(() => { onConfirmedChange?.(confirmed); }, [confirmed, onConfirmedChange]);
 
   // Initialize the map once. Center on the user's current position when
   // available (falls back to DEFAULT_CENTER on denial/timeout/unsupported
