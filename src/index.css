@@ -182,3 +182,7 @@ button.button--primary:active:not(:disabled) {
   font-size: 0.9rem;
   margin: var(--space-1) 0 var(--space-4);
 }
+/* Native radio groups: keyboard accessible, readable and touch-friendly. */
+.question-flow fieldset { margin: 1rem 0; border: 1px solid #64748b; border-radius: 0.5rem; }
+.question-flow label { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 44px; padding: 0.3rem 0.7rem; cursor: pointer; }
+.question-flow input:focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }

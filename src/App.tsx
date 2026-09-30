@@ -1,74 +1,57 @@
-/**
- * app-rooftop-solar — root component.
- *
- * See CLAUDE.md for the full spec and role split. This file wires up both
- * owners' surfaces so each can build out their half independently.
- *
- * Data flow: user taps/draws inputs here -> passed to
- * `engine-system-economics`'s getSystemEconomics() (imported as a package
- * dependency, in-process call, no network) -> result rendered back here.
- * See ARCHITECTURE.md's "Important: these are packages, not services".
- */
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getSystemEconomics } from 'engine-system-economics';
 import type { SystemEconomicsInput, SystemEconomicsOutput } from 'engine-system-economics';
 import { RoofMap } from './components/RoofMap';
 import { QuestionFlow } from './components/QuestionFlow';
 import { ResultsPanel } from './components/ResultsPanel';
+import { MilestoneAssumptions } from './components/MilestoneAssumptions';
 import { deriveRoofLocation } from './roofLocation';
 
 export default function App() {
   const [result, setResult] = useState<SystemEconomicsOutput | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Lifted here (rather than left local to RoofMap) because QuestionFlow
-  // needs it too, to assemble SystemEconomicsInput.roofPolygon — see
-  // RoofMap's onPolygonChange doc comment for what shape this is.
   const [roofPolygon, setRoofPolygon] = useState<[number, number][]>([]);
-  // SystemEconomicsInput.location — an explicit field per ARCHITECTURE.md
-  // ("SystemEconomicsInput fields relevant to the Radiation call"), derived
-  // here (not inside engine-system-economics) specifically so the two stay
-  // independent: economics validates `location` against `roofPolygon`
-  // rather than trusting a single source of truth for both. See
-  // roofLocation.ts for why center-of-mass, not mean-of-vertices.
+  const [confirmed, setConfirmed] = useState(false);
+  const [pending, setPending] = useState(false);
+  const revision = useRef(0);
+  const inFlight = useRef(false);
   const location = useMemo(() => deriveRoofLocation(roofPolygon), [roofPolygon]);
+  const invalidate = useCallback(() => {
+    revision.current++;
+    setResult(null);
+    setError(null);
+    // Keep pending until the existing request settles: the engine has no abort API.
+  }, []);
+  const handlePolygonChange = useCallback((polygon: [number, number][]) => {
+    invalidate(); setRoofPolygon(polygon); setConfirmed(false);
+  }, [invalidate]);
+  const handleConfirmedChange = useCallback((value: boolean) => {
+    invalidate(); setConfirmed(value);
+  }, [invalidate]);
+  useEffect(() => () => { revision.current++; }, []);
 
-  // async: engine-system-economics's getSystemEconomics() is async as of
-  // the pre-integration build (it awaits Radiation and, when a panel layout
-  // is supplied, an elevation lookup) -- see ARCHITECTURE.md. onSubmit's
-  // declared `=> void` type still accepts this (TS's void-return callback
-  // rule), and try/catch here still catches a synchronous throw too, so
-  // this is safe against both the current v0.1.1 stub and the real engine.
   async function handleSubmit(input: SystemEconomicsInput) {
+    if (inFlight.current || !confirmed || !location || roofPolygon.length < 3) return;
+    const requestRevision = ++revision.current;
+    inFlight.current = true; setPending(true); setError(null); setResult(null);
     try {
+      // Canonical App → Economics → Radiation; no direct Radiation import or call.
       const output = await getSystemEconomics(input);
-      setResult(output);
-      setError(null);
+      if (requestRevision === revision.current) setResult(output);
     } catch (err) {
-      // Expected for now: engine-system-economics and
-      // engine-radiation-uncertainty are both still stubs (see their
-      // CLAUDE.md / src/index.ts) and throw "Not implemented yet".
-      setError(err instanceof Error ? err.message : String(err));
-      setResult(null);
+      if (requestRevision === revision.current) setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      inFlight.current = false; setPending(false);
     }
   }
-
-  return (
-    <div className="app">
-      <h1 className="app__title">Global Rooftop Solar Potential Calculator</h1>
-      {/* Each stage in its own .section card so the page reads as clear
-          steps (map -> questions -> result) rather than one long
-          unstructured column — see the 2026-09-07 UX pass note in
-          RoofMap.tsx for why this repo needed a visible-structure pass. */}
-      {/* Owner A: map/polygon-draw + radiation-uncertainty rendering */}
-      <div className="section">
-        <RoofMap onPolygonChange={setRoofPolygon} />
-      </div>
-      {/* Owner B: tap-question flow + i18n + PDF export trigger */}
-      <div className="section">
-        <QuestionFlow roofPolygon={roofPolygon} location={location} onSubmit={handleSubmit} />
-      </div>
-      {error && <p role="alert">{error}</p>}
-      {result && <ResultsPanel result={result} />}
+  return <div className="app">
+    <h1 className="app__title">Global Rooftop Solar Potential Calculator</h1>
+    <div className="section"><RoofMap onPolygonChange={handlePolygonChange} onConfirmedChange={handleConfirmedChange} /></div>
+    <div className="section"><MilestoneAssumptions />
+      <QuestionFlow roofPolygon={roofPolygon} location={location} confirmed={confirmed} pending={pending} onChange={invalidate} onSubmit={handleSubmit} />
     </div>
-  );
+    {roofPolygon.length >= 3 && !location && <p role="alert">Could not derive a valid roof location. Please edit the outline.</p>}
+    {error && <p role="alert">{error}</p>}
+    {result && <ResultsPanel result={result} />}
+  </div>;
 }

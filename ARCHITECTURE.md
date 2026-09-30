@@ -19,6 +19,15 @@ The project's non-negotiable constraint is **no backend server** — everything 
 
 ## Interface contracts (the part that must not silently drift between repos)
 
+### Implemented Milestone 1 clarification
+
+See MILESTONE1.md for the approved App assumptions and v0.5.1 payload.
+The implemented result keeps top-level uncertainty_ci_90 null; physical and
+orientation widening is exposed as provisional scenario envelopes, not a final
+calibrated CI.
+Location is supplied by App using point-on-feature and must be inside/on the roof.
+Roof confirmation gates submission. Shape is descriptive; no plane is inferred.
+
 **Canonical call flow (locked 2026-09-09): App → Economics → Radiation.** `app-rooftop-solar` calls only `engine-system-economics`; `engine-system-economics` calls `engine-radiation-uncertainty` internally (see "Roof planes / v1 scope" below for how many times per call). Nobody passes a precomputed radiation output *into* `engine-system-economics` as an input — that was an earlier, since-rejected shape (`SystemEconomicsInput.radiation: RadiationOutput`) and is no longer correct; this section describes the current, corrected contract.
 
 - **`engine-radiation-uncertainty` exports**: `getRadiationEstimate({ lat, lng, tier, tiltDeg?, azimuthDeg? })`, returning `{ kWh_per_m2_per_year, uncertainty_ci_90, clearnessIndex?, transpositionFactor? }`. Stable as of `v0.1.2` — tilt/azimuth support, tier routing, and the aerosol-correction decision are each resolved (see that repo's `CLAUDE.md`).
@@ -27,7 +36,7 @@ The project's non-negotiable constraint is **no backend server** — everything 
 
 ### `SystemEconomicsInput` fields relevant to the Radiation call
 
-- **`location: { lat, lng }`** — an explicit field, not derived from `roofPolygon`. `engine-system-economics` should validate that `location` is reasonably consistent with `roofPolygon` (e.g. falls within or near it) rather than trusting two independent, potentially-conflicting sources of truth silently.
+- **`location: { lat, lng }`** — App derives an on-roof representative location from `roofPolygon` using `point-on-feature` and passes it explicitly to `engine-system-economics`. The location must be inside or on the roof boundary; Economics remains responsible for polygon and location-consistency validation.
 - **`radiationTier: 1 | 2 | 3`** — passed straight through to `engine-radiation-uncertainty`'s `tier` param (irradiance source ensemble quality). Set explicitly by the app/data layer.
 - No tilt/azimuth/plane field in v1's public input at all — see "Roof planes / v1 scope" immediately below for why.
 
@@ -35,7 +44,7 @@ The project's non-negotiable constraint is **no backend server** — everything 
 
 **v1 has no real source of per-plane roof geometry.** `app-rooftop-solar`'s `RoofMap` only draws a flat `[lat, lng]` outline — no ridge, no pitch, no per-face azimuth — and no other data source (LiDAR, footprint service, manual plane input) is wired in yet. This is true **regardless of `roofMetadata.shape`** — a `'gable'` roof is a description of the roof's physical shape, not proof that this project knows its two faces' actual tilt/azimuth.
 
-So for v1: **every call makes exactly one `getRadiationEstimate()` call, with `tiltDeg`/`azimuthDeg` omitted**, letting `engine-radiation-uncertainty`'s documented default surface (`defaultSurfaceForLatitude()`) apply — the same path for `flat`, `gable`, and `unknown` alike. This is not a claim that a gable roof physically has that tilt; it's an honest "the real surface orientation is unavailable, so a documented fallback assumption is being used instead." `engine-system-economics` should record that assumption (a comment citing it, per this project's "never claim precision the data doesn't support" rule) and widen its own returned `uncertainty_ci_90` beyond what `engine-radiation-uncertainty` alone reports — the radiation engine's CI is about irradiance-estimation uncertainty, not "is this even the right roof surface" uncertainty, so that second, larger source of error needs its own disclosed factor. The exact widening method is an internal `engine-system-economics` implementation detail, not a cross-repo contract question.
+So for v1: **every call makes exactly one `getRadiationEstimate()` call, with `tiltDeg`/`azimuthDeg` omitted**, letting `engine-radiation-uncertainty`'s documented default surface (`defaultSurfaceForLatitude()`) apply — the same path for `flat`, `gable`, and `unknown` alike. This is not a claim that a gable roof physically has that tilt; it's an honest "the real surface orientation is unavailable, so a documented fallback assumption is being used instead." `engine-system-economics` records this fallback assumption and keeps its top-level `uncertainty_ci_90` null. Milestone 1 surfaces physical and orientation uncertainty through clearly labeled provisional scenario envelopes, not calibrated confidence intervals. Radiation's interval alone does not account for the unknown actual roof orientation; the additional allowances remain disclosed and provisional. Scenario-envelope construction belongs to Economics, not App.
 
 **Future, not implemented (no data source exists yet, so this is intentionally not part of today's public `SystemEconomicsInput`):** once a real per-plane geometry source exists, a roof becomes one or more planes, each independently callable against `engine-radiation-uncertainty`. Per-plane installed capacity is **derived**, not caller-supplied — it comes out of `engine-system-economics`' own panel-layout/bin-packing step for that plane (e.g. "14 panels fit on plane A, 10 on plane B"), not a `capacityFraction` field on any public input. Energy is computed **per plane** (plane geometry → panel layout/installed capacity → that plane's own `getRadiationEstimate()` call → that plane's electrical energy) and then summed — POA values are never averaged together before that. `uncertainty_ci_90` for a multi-plane system is not a weighted average of the two intervals either; it needs a real propagation across planes, including shared/correlated radiation uncertainty where applicable. None of this is implemented today; it's recorded here so the eventual multi-plane types can be added without v1 pretending this data already exists.
 

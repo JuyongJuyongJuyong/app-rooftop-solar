@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { deriveRoofLocation } from './roofLocation';
+import { booleanPointInPolygon, polygon, point } from '@turf/turf';
 
 describe('deriveRoofLocation', () => {
   it('returns null with fewer than 3 points (mirrors RoofMap\'s own "ready" threshold)', () => {
@@ -23,9 +24,7 @@ describe('deriveRoofLocation', () => {
     expect(location!.lng).toBeCloseTo(1, 6);
   });
 
-  it('centers a right triangle at the mean of its vertices', () => {
-    // Center of mass of a triangle always equals the mean of its 3
-    // vertices, regardless of shape -- another exact, easy check.
+  it('returns an on-roof point for a triangle (not a promised centroid)', () => {
     const triangle: [number, number][] = [
       [0, 0],
       [0, 4],
@@ -33,8 +32,8 @@ describe('deriveRoofLocation', () => {
     ];
     const location = deriveRoofLocation(triangle);
     expect(location).not.toBeNull();
-    expect(location!.lat).toBeCloseTo(4 / 3, 6);
-    expect(location!.lng).toBeCloseTo(4 / 3, 6);
+    expect(booleanPointInPolygon(point([location!.lng, location!.lat]),
+      polygon([[[0, 0], [4, 0], [0, 4], [0, 0]]]))).toBe(true);
   });
 
   it('does not mutate the input polygon (ring-closing must not leak out)', () => {
@@ -48,4 +47,20 @@ describe('deriveRoofLocation', () => {
     deriveRoofLocation(square);
     expect(square.length).toBe(before);
   });
+});
+
+it('handles a concave U whose centroid lies outside the roof', () => {
+  const ring: [number, number][] = [[0, 0], [0, 4], [4, 4], [4, 3], [1, 3], [1, 1], [4, 1], [4, 0]];
+  const before = structuredClone(ring);
+  const location = deriveRoofLocation(ring)!;
+  const geo = ring.map(([lat, lng]) => [lng, lat]);
+  geo.push(geo[0]!);
+  expect(booleanPointInPolygon(point([location.lng, location.lat]), polygon([geo]))).toBe(true);
+  expect(ring).toEqual(before);
+});
+
+it('returns null for malformed coordinates or too few distinct points', () => {
+  expect(deriveRoofLocation([[NaN, 0], [1, 0], [1, 1]])).toBeNull();
+  expect(deriveRoofLocation([[0, 0], [0, 0], [0, 0]])).toBeNull();
+  expect(deriveRoofLocation([[91, 0], [1, 0], [1, 1]])).toBeNull();
 });
